@@ -1,0 +1,57 @@
+-- This file is the reference schema -- create the database from it directly.
+--
+-- username and password_hash are nullable because an invited user has neither
+-- until they complete registration; the CHECK constraints below are what stop
+-- an account becoming active without them.
+CREATE TABLE public.dashboard_users (
+	id serial4 NOT NULL,
+	username varchar(50) NULL,
+	password_hash text NULL,
+	full_name varchar(100) NULL,
+	email varchar(100) NULL,
+	role_id int4 NOT NULL,
+	created_at timestamp DEFAULT now() NULL,
+	current_session_id varchar(255) NULL,
+	last_login_device text NULL,
+	last_login_at timestamp NULL,
+	status varchar(20) DEFAULT 'active' NOT NULL,   -- invited | active | disabled
+	invited_at timestamp NULL,
+	invited_by int4 NULL,
+	activated_at timestamp NULL,
+	invite_expires_at timestamp NULL,
+	signup_token_hash text NULL,                    -- SHA-256 of the step-1 token
+	signup_token_expires_at timestamp NULL,
+	reset_token_hash text NULL,                     -- SHA-256 of the password-reset token
+	reset_token_expires_at timestamp NULL,
+	CONSTRAINT dashboard_users_pkey PRIMARY KEY (id),
+	CONSTRAINT dashboard_users_username_key UNIQUE (username),
+	CONSTRAINT dashboard_users_status_check CHECK (status IN ('invited', 'active', 'disabled')),
+	CONSTRAINT dashboard_users_active_has_credentials CHECK (status <> 'active' OR (username IS NOT NULL AND password_hash IS NOT NULL)),
+	CONSTRAINT dashboard_users_invited_has_email CHECK (status <> 'invited' OR email IS NOT NULL),
+	CONSTRAINT dashboard_users_role_id_fkey FOREIGN KEY (role_id) REFERENCES public.roles(id) ON DELETE RESTRICT,
+	CONSTRAINT dashboard_users_invited_by_fkey FOREIGN KEY (invited_by) REFERENCES public.dashboard_users(id) ON DELETE SET NULL
+);
+
+-- Registration looks accounts up by email, so it has to identify exactly one.
+CREATE UNIQUE INDEX dashboard_users_email_lower_key ON public.dashboard_users (lower(email)) WHERE email IS NOT NULL;
+CREATE INDEX dashboard_users_status_idx ON public.dashboard_users (status) WHERE status <> 'active';
+
+
+
+CREATE TABLE public.roles (
+	id serial4 NOT NULL,
+	role_name varchar(50) NOT NULL,
+	description text NULL,
+	permissions jsonb DEFAULT '{"layers": [], "canEdit": false, "regions": [], "features": {}, "canExport": false}'::jsonb NOT NULL,
+	created_at timestamp DEFAULT now() NULL,
+	CONSTRAINT roles_pkey PRIMARY KEY (id),
+	CONSTRAINT roles_role_name_key UNIQUE (role_name)
+);
+
+CREATE TABLE public."session" (
+	sid varchar NOT NULL,
+	sess json NOT NULL,
+	expire timestamptz(6) NOT NULL,
+	CONSTRAINT session_pkey PRIMARY KEY (sid)
+);
+CREATE INDEX "IDX_session_expire" ON public.session USING btree (expire);

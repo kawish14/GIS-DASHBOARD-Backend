@@ -1,0 +1,11 @@
+node_modules/
+
+# Secrets. Use .env.example as the template.
+.env
+.env.*
+!.env.example
+
+# Local session store
+data/*.sqlite
+
+npm-debug.log*

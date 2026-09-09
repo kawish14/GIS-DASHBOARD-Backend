@@ -1,0 +1,24 @@
+{
+  "dependencies": {
+    "bcrypt": "^6.0.0",
+    "connect-pg-simple": "^5.0.0",
+    "cors": "^2.8.6",
+    "dotenv": "^17.4.2",
+    "express": "^5.2.1",
+    "express-session": "^1.19.0",
+    "nodemailer": "^7.0.3",
+    "nodemon": "^3.1.11",
+    "pg": "^8.17.2",
+    "ua-parser-js": "^2.0.10"
+  },
+  "name": "backend",
+  "version": "1.0.0",
+  "main": "server.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "start": "nodemon server.js"
+  },
+  "author": "kawish",
+  "license": "ISC",
+  "description": ""
+}
