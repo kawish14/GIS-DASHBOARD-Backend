@@ -25,7 +25,7 @@ const nodemailer = require('nodemailer');
 const REGISTER_PATH = '/register';
 const LOGIN_PATH = '/login';
 
-const APP_BASE_URL = (process.env.APP_BASE_URL || 'http://172.29.100.28:5173').replace(/\/+$/, '');
+const APP_BASE_URL = (process.env.APP_BASE_URL || 'http://gis.tes.com.pk:5001/').replace(/\/+$/, '');
 
 let cachedTransport;
 
@@ -156,11 +156,6 @@ function buildInvitationBody({ email, username, fullName, role, expiresAt }) {
         '',
         ...steps.map((step, i) => `  ${i + 1}. ${step}`),
         '',
-        username
-            ? `You sign in with the username above (${username}), not with your email address.`
-            : null,
-        '',
-        role ? `Your access level: ${role}` : null,
         expiry ? `This invitation is valid until ${expiry}.` : null,
         '',
         'If you were not expecting this email, please contact your GIS Admin.',
@@ -184,10 +179,6 @@ function buildInvitationBody({ email, username, fullName, role, expiresAt }) {
           <li style="margin-bottom:8px;">Enter your email address: <strong style="color:#0f172a;">${escapeHtml(email)}</strong></li>
           <li>Choose a password. That is the only thing left to set.</li>
         </ol>
-
-        ${username ? `<p style="margin:0 0 8px;color:#475569;font-size:14px;">You sign in with <strong style="color:#0f172a;">${escapeHtml(username)}</strong>, not with your email address.</p>` : ''}
-
-        ${role ? `<p style="margin:0 0 8px;color:#475569;font-size:14px;">Your access level: <strong style="color:#0f172a;">${escapeHtml(role)}</strong></p>` : ''}
         ${expiry ? `<p style="margin:0 0 24px;color:#475569;font-size:14px;">This invitation is valid until <strong style="color:#0f172a;">${escapeHtml(expiry)}</strong>.</p>` : ''}
 
         <p style="margin:24px 0 0;padding-top:20px;border-top:1px solid #e2e8f0;color:#64748b;font-size:13px;">

@@ -7,7 +7,7 @@ const { sendInvitationEmail, sendCredentialsEmail, getRegistrationUrl, getLoginU
 const { generateUniqueUsername } = require("../utils/usernameGenerator");
 
 // How long an invitation stays open before the admin has to re-issue it.
-const INVITE_VALIDITY_DAYS = 14;
+const INVITE_VALIDITY_DAYS = 2;
 
 /**
  * Turn a Postgres unique violation (23505) into a message that names the
