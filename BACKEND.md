@@ -134,9 +134,20 @@ does not go out — the response carries `emailSent` so the panel can say so.
 | Method | Path | Guard | Called from |
 |---|---|---|---|
 | POST | `/nce/nce-history/advanced-analytics` | `isAuthenticated` | `features/filters/widgets/AlarmAnalyticsFilter.jsx` |
+| POST | `/nce/nce-history/restoration-trend` | `isAuthenticated` | `features/analytics/RestorationTrend.jsx` |
 
-The only route here that had a caller. It reads `webappPool`, not `pool` — see
-§5.1.
+Both read `webappPool`, not `pool` — see §5.1.
+
+**`restoration-trend`** takes `{ days, region: [] }` (the window is clamped to
+1–90 days) and answers with three rollups over `sde.nce_alerts_history`:
+`raisedByDay`, `clearedByDay` (with that day's average and median
+`outage_duration`), and `byRegion` (raised / cleared / still open / average /
+median). The browser gets counts, never fault rows.
+
+Two things about the SQL are deliberate. `fault_time` and `fault_time_clear`
+are `CAST(... AS timestamp)` because they are stored as text — compared raw
+they sort like strings. And the region filter is on `c.region`, qualified,
+since the column exists on the customer side of the join.
 
 ---
 

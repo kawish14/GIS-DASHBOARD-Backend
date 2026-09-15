@@ -110,4 +110,103 @@ router.post("/nce-history/advanced-analytics", isAuthenticated, async (req, res)
     res.status(500).json({ success: false, error: "Failed to execute analytical queries" });
   }
 });
+// Restoration trend: what the fault log did over a window, rather than what it
+// says right now.
+//
+// Called by features/analytics/RestorationTrend.jsx. The rest of the dashboard
+// -- the alarm sidebar, FaultAnalytics, the map itself -- is a snapshot of this
+// instant, which answers "what is broken?" but never "are we gaining on it?".
+// That question is raised-vs-cleared per day plus how long a restore takes, and
+// both live in sde.nce_alerts_history.
+//
+// Only columns this file already relies on elsewhere are used here: alias,
+// fault_time, fault_time_clear, outage_duration, and region off the customer
+// join. fault_time is CAST like it is in the query above -- it is stored as
+// text, and comparing it to NOW() without the cast sorts it as a string.
+router.post("/nce-history/restoration-trend", isAuthenticated, async (req, res) => {
+  try {
+    const { days = 14, region = [] } = req.body;
+
+    // A window, not an era: this is a trend view, and a year of daily buckets
+    // is neither readable nor cheap.
+    const windowDays = Math.min(Math.max(parseInt(days, 10) || 14, 1), 90);
+
+    const params = [windowDays];
+    let regionClause = "";
+    if (Array.isArray(region) && region.length > 0) {
+      params.push(region);
+      regionClause = ` AND c.region = ANY($${params.length})`;
+    }
+
+    // Raised per day -- when the alarm came in.
+    const q_raised = `
+      SELECT
+        to_char(date_trunc('day', CAST(h.fault_time AS timestamp)), 'YYYY-MM-DD') AS day,
+        COUNT(*) AS raised
+      FROM sde.nce_alerts_history h
+      JOIN sde.customer c ON h.alias = c.id
+      WHERE CAST(h.fault_time AS timestamp) >= NOW() - ($1 * INTERVAL '1 day')
+        ${regionClause}
+      GROUP BY 1
+      ORDER BY 1;
+    `;
+
+    // Cleared per day, with that day's restore times alongside it. Median as
+    // well as mean because one week-long outage drags an average somewhere no
+    // actual restore went.
+    const q_cleared = `
+      SELECT
+        to_char(date_trunc('day', CAST(h.fault_time_clear AS timestamp)), 'YYYY-MM-DD') AS day,
+        COUNT(*) AS cleared,
+        ROUND(AVG(COALESCE(h.outage_duration, 0))::numeric, 1) AS avg_minutes,
+        ROUND(percentile_cont(0.5) WITHIN GROUP (ORDER BY COALESCE(h.outage_duration, 0))::numeric, 1) AS median_minutes
+      FROM sde.nce_alerts_history h
+      JOIN sde.customer c ON h.alias = c.id
+      WHERE h.fault_time_clear IS NOT NULL
+        AND CAST(h.fault_time_clear AS timestamp) >= NOW() - ($1 * INTERVAL '1 day')
+        ${regionClause}
+      GROUP BY 1
+      ORDER BY 1;
+    `;
+
+    // The same window per region, plus what is still open out of what was
+    // raised in it -- the backlog the next shift inherits.
+    const q_regions = `
+      SELECT
+        c.region,
+        COUNT(*) AS raised,
+        COUNT(*) FILTER (WHERE h.fault_time_clear IS NOT NULL) AS cleared,
+        COUNT(*) FILTER (WHERE h.fault_time_clear IS NULL) AS still_open,
+        ROUND(AVG(COALESCE(h.outage_duration, 0)) FILTER (WHERE h.fault_time_clear IS NOT NULL)::numeric, 1) AS avg_minutes,
+        ROUND(percentile_cont(0.5) WITHIN GROUP (ORDER BY COALESCE(h.outage_duration, 0))
+              FILTER (WHERE h.fault_time_clear IS NOT NULL)::numeric, 1) AS median_minutes
+      FROM sde.nce_alerts_history h
+      JOIN sde.customer c ON h.alias = c.id
+      WHERE CAST(h.fault_time AS timestamp) >= NOW() - ($1 * INTERVAL '1 day')
+        ${regionClause}
+      GROUP BY c.region
+      ORDER BY c.region;
+    `;
+
+    const [resRaised, resCleared, resRegions] = await Promise.all([
+      webappPool.query(q_raised, params),
+      webappPool.query(q_cleared, params),
+      webappPool.query(q_regions, params),
+    ]);
+
+    res.json({
+      success: true,
+      data: {
+        windowDays,
+        raisedByDay: resRaised.rows,
+        clearedByDay: resCleared.rows,
+        byRegion: resRegions.rows,
+      },
+    });
+  } catch (err) {
+    console.error("Error executing restoration trend:", err);
+    res.status(500).json({ success: false, error: "Failed to build the restoration trend" });
+  }
+});
+
 module.exports = router;
