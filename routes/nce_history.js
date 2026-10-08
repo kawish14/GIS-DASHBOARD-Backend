@@ -3,6 +3,7 @@ const router = express.Router();
 // Import the webapp pool we created earlier
 const { webappPool } = require("../db/db"); 
 const { isAuthenticated } = require("./auth");
+const { logActivity, ACTIONS } = require("../utils/activityLog");
 
 // Alarm diagnostics for the map's filter panel.
 //
@@ -97,6 +98,11 @@ router.post("/nce-history/advanced-analytics", isAuthenticated, async (req, res)
       webappPool.query(q1_summary, queryParams),
       webappPool.query(q2_zones, queryParamsBroad)
     ]);
+
+    // Which filters people actually use -- worth knowing before changing them.
+    logActivity(req, ACTIONS.NCE_ANALYTICS, {
+      details: { alarmstate, days, minDuration, minRepeats, region, results: resSummary.rowCount },
+    });
 
     res.json({
       success: true,

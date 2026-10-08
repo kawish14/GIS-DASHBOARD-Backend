@@ -21,6 +21,7 @@ const { pool } = require('../db/db');
 const { generateUniqueUsername } = require('../utils/usernameGenerator');
 const { validatePasswordStrength, hashPassword } = require('../utils/password');
 const { rateLimit, refundRateLimit } = require('../utils/rateLimiter');
+const { logActivity, ACTIONS } = require('../utils/activityLog');
 const {
   normalizeEmail, isPlausibleEmail, issueToken, tokenMatches, isExpired,
 } = require('../utils/tokens');
@@ -97,12 +98,15 @@ router.post(
       );
 
       if (rows.length === 0) {
+        logActivity(req, ACTIONS.SIGNUP_VERIFY_EMAIL, { status: 'failure', details: { email, reason: 'not_invited' } });
         return res.status(404).json({ error: NOT_INVITED_MESSAGE, code: 'NOT_INVITED' });
       }
 
       const user = rows[0];
+      const fail = (reason) => logActivity(req, ACTIONS.SIGNUP_VERIFY_EMAIL, { status: 'failure', user, details: { email, reason } });
 
       if (user.status === 'active') {
+        fail('already_registered');
         return res.status(409).json({
           error: 'This email is already registered. Please sign in with your username instead.',
           code: 'ALREADY_REGISTERED',
@@ -113,10 +117,12 @@ router.post(
         // 'disabled', or any state added later. Same wording as an unknown
         // address: whether an account exists but is blocked is not something a
         // stranger needs to know.
+        fail(`account_${user.status}`);
         return res.status(403).json({ error: NOT_INVITED_MESSAGE, code: 'NOT_INVITED' });
       }
 
       if (user.invite_expires_at && new Date(user.invite_expires_at) <= new Date()) {
+        fail('invite_expired');
         return res.status(410).json({
           error: 'This invitation has expired. Please ask the GIS Admin to invite you again.',
           code: 'INVITE_EXPIRED',
@@ -131,6 +137,8 @@ router.post(
           WHERE id = $3`,
         [tokenHash, expiresAt, user.id]
       );
+
+      logActivity(req, ACTIONS.SIGNUP_VERIFY_EMAIL, { user, details: { email } });
 
       return res.json({
         success: true,
@@ -261,6 +269,7 @@ router.post(
         if (isExpired(user.signup_token_expires_at)
             || !tokenMatches(signupToken, user.signup_token_hash)) {
           await client.query('ROLLBACK');
+          logActivity(req, ACTIONS.SIGNUP_COMPLETE, { status: 'failure', user, details: { email, reason: 'invalid_or_expired_token' } });
           return res.status(401).json({
             error: 'Your registration session has expired. Please verify your email again.',
             code: 'INVALID_TOKEN',
@@ -308,6 +317,7 @@ router.post(
         await client.query('COMMIT');
 
         console.log(`Registration completed for ${user.email} as "${username}"`);
+        logActivity(req, ACTIONS.SIGNUP_COMPLETE, { user: { id: user.id, username }, details: { email } });
 
         refundRateLimit(req);
         return res.json({

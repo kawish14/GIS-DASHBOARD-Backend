@@ -4,6 +4,7 @@ const bcrypt = require("bcrypt");
 const { pool } = require("../db/db"); 
 const { isAuthenticated } = require("./auth");
 const { UAParser } = require('ua-parser-js');
+const { logActivity, ACTIONS } = require("../utils/activityLog");
 //const enforceAbsoluteTimeout = require('./sessionEnforcer')
 
 router.post("/login", async (req, res) => {
@@ -56,6 +57,12 @@ router.post("/login", async (req, res) => {
           );
           const { last_login_device, last_login_at } = deviceResult.rows[0];
 
+          logActivity(req, ACTIONS.LOGIN, {
+            status: 'failure',
+            user,
+            details: { reason: 'already_logged_in', other_device: last_login_device },
+          });
+
          return res.status(403).json({
             error: `You are already logged in on another device (${last_login_device || 'unknown device'}). Please log out there or wait for the session to expire.`
           });
@@ -94,6 +101,7 @@ router.post("/login", async (req, res) => {
                     // full_name: full_name is optional, and printing a null
                     // here read as though the session itself were empty.
                     console.log(`Signed in: ${user.username} (${user.role})`);
+                    logActivity(req, ACTIONS.LOGIN, { details: { role: user.role } });
                     return res.json({
                         full_name: user.full_name,
                         email: user.email,
@@ -111,7 +119,16 @@ router.post("/login", async (req, res) => {
         return; 
       }
     }
-    
+
+    // The caller gets the same 401 either way; only the log tells the two
+    // apart, so an admin can see whether an account is being guessed at.
+    const knownUser = userResult.rows[0];
+    logActivity(req, ACTIONS.LOGIN, {
+      status: 'failure',
+      user: knownUser || { username },
+      details: { reason: knownUser ? 'wrong_password' : 'unknown_or_inactive_username' },
+    });
+
     res.status(401).json({ error: "Invalid credentials" });
     
   } catch (err) {
@@ -140,6 +157,7 @@ router.post("/logout", async (req, res) => {
   // the user's id, email, role and permissions -- into the server log on every
   // sign-out. The username is all that is useful here.
   const signedOut = req.session?.user?.username;
+  if (signedOut) logActivity(req, ACTIONS.LOGOUT);
 
   req.session.destroy((err) => {
     if (err) {
