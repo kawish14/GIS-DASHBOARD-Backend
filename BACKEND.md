@@ -8,9 +8,15 @@ the source rather than from memory.
 - **Database:** PostgreSQL (`db/db.js`), sessions stored in the `session` table
 - **Frontend repo:** `GIS-DASHBOARD` — the paths below refer to files in it
 - **Start:** `npm install && npm start` (nodemon)
+<<<<<<< HEAD
 - **Size:** 23 routes across 5 routers, plus `routes/auth.js` (middleware, not a
   router) and 6 helpers in `utils/`. Every route but `GET /admin/logs` and
   `GET /admin/sessions` has a frontend caller — see §3 for what was removed to get here.
+=======
+- **Size:** 22 routes across 5 routers, plus `routes/auth.js` (middleware, not a
+  router) and 6 helpers in `utils/`. Every route but `GET /admin/logs` has a
+  frontend caller — see §3 for what was removed to get here.
+>>>>>>> 6d77544a493bd751f0fd264eab906275b9a2250a
 
 ---
 
@@ -107,7 +113,11 @@ changing a password signs the account out everywhere.
 
 ### 2.4 `/admin` — user and role administration · `routes/admin_routes.js`
 
+<<<<<<< HEAD
 Every route below is guarded by `isAuthenticated, isAdmin`. All but `/admin/logs` and `/admin/sessions` are called from
+=======
+Every route below is guarded by `isAuthenticated, isAdmin`. All but `/admin/logs` are called from
+>>>>>>> 6d77544a493bd751f0fd264eab906275b9a2250a
 the single file **`features/admin/AdminPage.jsx`**:
 
 | Method | Path | AdminPage function |
@@ -125,7 +135,10 @@ the single file **`features/admin/AdminPage.jsx`**:
 | DELETE | `/admin/roles/:id` | `executeDirectDelete()` |
 | POST | `/admin/roles/:id/reassign-and-delete` | `handleConfirmReassignAndDelete()` |
 | GET | `/admin/logs` | *not called yet* — reads the activity log, see §5.3 |
+<<<<<<< HEAD
 | GET | `/admin/sessions` | *not called yet* — time spent signed in, see §5.4 |
+=======
+>>>>>>> 6d77544a493bd751f0fd264eab906275b9a2250a
 
 `POST /admin/users/invite` and `POST /admin/users` both generate the username
 (see `utils/usernameGenerator.js`) and send an email. Neither fails if the mail
@@ -265,7 +278,10 @@ Errors and debug output still go to the console.
 | `status` | `success` or `failure` |
 | `ip_address`, `device`, `user_agent` | Where from. `device` is the readable label, e.g. `Chrome on Windows`. |
 | `details` | JSON for anything action-specific: the failure `reason`, the `target_user_id` of an admin change, the filters used. Passwords and tokens are never logged. |
+<<<<<<< HEAD
 | `session_id` | The same value on every row of one sign-in, so the rows of a session can be grouped. A 16-character hash, not the real session id. |
+=======
+>>>>>>> 6d77544a493bd751f0fd264eab906275b9a2250a
 
 To log something new: add a name to `ACTIONS`, then call
 `logActivity(req, ACTIONS.YOUR_ACTION, { details: { … } })` where it happens.
@@ -277,6 +293,7 @@ and the request carries on, so a broken log never stops anyone signing in.
 
 `schema.txt` ends with example queries for common patterns.
 
+<<<<<<< HEAD
 `created_at` is a `timestamptz`: Postgres stores it in UTC and shows it in the
 viewer's time zone, so `14:27:28 +0500` and `09:27:28Z` are the same moment.
 The API returns UTC (`…Z`); `new Date()` in the browser shows it in local time.
@@ -306,6 +323,8 @@ window's start counts only the part inside it. Every value is in seconds.
 The frontend keeps a session alive as long as it makes requests, so this
 measures time with the dashboard open, not time actively clicking.
 
+=======
+>>>>>>> 6d77544a493bd751f0fd264eab906275b9a2250a
 ---
 
 ## 6. Configuration

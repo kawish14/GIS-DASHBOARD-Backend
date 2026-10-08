@@ -702,6 +702,7 @@ router.get('/logs', isAuthenticated, isAdmin, async (req, res) => {
     }
 });
 
+<<<<<<< HEAD
 // How long users stayed signed in, from the user_sessions view (schema.txt).
 //
 //   GET /admin/sessions                                  today
@@ -755,4 +756,6 @@ router.get('/sessions', isAuthenticated, isAdmin, async (req, res) => {
     }
 });
 
+=======
+>>>>>>> 6d77544a493bd751f0fd264eab906275b9a2250a
 module.exports = router;

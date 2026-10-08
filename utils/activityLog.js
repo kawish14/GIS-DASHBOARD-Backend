@@ -27,7 +27,10 @@ const ACTIONS = {
   LOGIN:                'auth.login',
   LOGOUT:               'auth.logout',
   SESSION_ENDED:        'auth.session_ended',     // kicked out: account disabled, or session replaced
+<<<<<<< HEAD
   SESSION_TIMEOUT:      'auth.session_timeout',   // idle too long; written by jobs/cleanupSessions.js
+=======
+>>>>>>> 6d77544a493bd751f0fd264eab906275b9a2250a
 
   // Invitation sign-up
   SIGNUP_VERIFY_EMAIL:  'signup.verify_email',
@@ -76,6 +79,7 @@ function logActivity(req, action, { status = 'success', user, details } = {}) {
   const who = user || req.session?.user || {};
   const userAgent = req.headers['user-agent'] || null;
 
+<<<<<<< HEAD
   // Ties every row from one sign-in together, so a session's length is the
   // time between its auth.login row and the row that ended it. Only set once
   // someone is signed in. Stored as a short hash: the raw id plus the session
@@ -86,6 +90,11 @@ function logActivity(req, action, { status = 'success', user, details } = {}) {
   pool.query(
     `INSERT INTO user_logs (user_id, username, action, status, ip_address, device, user_agent, details, session_id)
      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, left(encode(sha256(convert_to($9, 'UTF8')), 'hex'), 16))`,
+=======
+  pool.query(
+    `INSERT INTO user_logs (user_id, username, action, status, ip_address, device, user_agent, details)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
+>>>>>>> 6d77544a493bd751f0fd264eab906275b9a2250a
     [
       who.id || null,
       who.username ? String(who.username).slice(0, 100) : null,
@@ -95,7 +104,10 @@ function logActivity(req, action, { status = 'success', user, details } = {}) {
       describeDevice(userAgent),
       userAgent,
       details ? JSON.stringify(details) : null,
+<<<<<<< HEAD
       sessionId,
+=======
+>>>>>>> 6d77544a493bd751f0fd264eab906275b9a2250a
     ]
   ).catch((err) => {
     console.error(`[user-log] could not record "${action}":`, err.message);
