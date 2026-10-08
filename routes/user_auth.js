@@ -3,15 +3,11 @@ const router = express.Router();
 const bcrypt = require("bcrypt");
 const { pool } = require("../db/db"); 
 const { isAuthenticated } = require("./auth");
-const { UAParser } = require('ua-parser-js');
-//const enforceAbsoluteTimeout = require('./sessionEnforcer')
+const { logActivity, ACTIONS, describeDevice } = require("../utils/activityLog");
 
 router.post("/login", async (req, res) => {
   const { username, password } = req.body;
-  const parser = new UAParser(req.headers['user-agent']);
-  const { browser, os } = parser.getResult();
-  const deviceLabel = `${browser.name || 'Unknown browser'} on ${os.name || 'Unknown OS'}`;
-  
+  const deviceLabel = describeDevice(req.headers['user-agent']) || 'Unknown device';
 
   try {
     // status = 'active' excludes accounts that were invited but never
@@ -51,10 +47,16 @@ router.post("/login", async (req, res) => {
         if (isAlreadyLoggedIn) {
 
           const deviceResult = await pool.query(
-            'SELECT last_login_device, last_login_at FROM dashboard_users WHERE id = $1',
+            'SELECT last_login_device FROM dashboard_users WHERE id = $1',
             [user.id]
           );
-          const { last_login_device, last_login_at } = deviceResult.rows[0];
+          const { last_login_device } = deviceResult.rows[0];
+
+          logActivity(req, ACTIONS.LOGIN, {
+            status: 'failure',
+            user,
+            details: { reason: 'already_logged_in', other_device: last_login_device },
+          });
 
          return res.status(403).json({
             error: `You are already logged in on another device (${last_login_device || 'unknown device'}). Please log out there or wait for the session to expire.`
@@ -80,7 +82,6 @@ router.post("/login", async (req, res) => {
                     return res.status(500).json({ error: "Session save failed" });
                 }
 
-                // FIXED: Changed 'users' to 'dashboard_users'
                 try {
                     await pool.query(
                       `UPDATE dashboard_users 
@@ -94,6 +95,7 @@ router.post("/login", async (req, res) => {
                     // full_name: full_name is optional, and printing a null
                     // here read as though the session itself were empty.
                     console.log(`Signed in: ${user.username} (${user.role})`);
+                    logActivity(req, ACTIONS.LOGIN, { details: { role: user.role } });
                     return res.json({
                         full_name: user.full_name,
                         email: user.email,
@@ -111,7 +113,16 @@ router.post("/login", async (req, res) => {
         return; 
       }
     }
-    
+
+    // The caller gets the same 401 either way; only the log tells the two
+    // apart, so an admin can see whether an account is being guessed at.
+    const knownUser = userResult.rows[0];
+    logActivity(req, ACTIONS.LOGIN, {
+      status: 'failure',
+      user: knownUser || { username },
+      details: { reason: knownUser ? 'wrong_password' : 'unknown_or_inactive_username' },
+    });
+
     res.status(401).json({ error: "Invalid credentials" });
     
   } catch (err) {
@@ -140,6 +151,7 @@ router.post("/logout", async (req, res) => {
   // the user's id, email, role and permissions -- into the server log on every
   // sign-out. The username is all that is useful here.
   const signedOut = req.session?.user?.username;
+  if (signedOut) logActivity(req, ACTIONS.LOGOUT);
 
   req.session.destroy((err) => {
     if (err) {
@@ -153,7 +165,7 @@ router.post("/logout", async (req, res) => {
 
 router.get("/active-users", isAuthenticated, async (req, res) => {
   try {
-    // FIXED: Restored the INNER JOIN with the session table
+    // Joining the session table limits this to users whose session still exists.
     const result = await pool.query(`
         SELECT u.id, u.username, u.full_name, u.email, r.role_name as role, r.permissions 
         FROM dashboard_users u

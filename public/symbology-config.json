@@ -1,0 +1,247 @@
+{
+  "_comment": "Served at runtime as /symbology-config.json (or via API). Editing this file changes map symbology immediately for anyone who reloads the page, or instantly for connected users if your backend broadcasts a 'symbology-updated' socket event after saving (see useSymbologyLiveReload.js). No frontend rebuild or redeploy needed.",
+
+  "longhaul": {
+    "type": "unique-value",
+    "field": "fiber_type",
+    "visible": false,
+    "defaultSymbol": { "color": "#000000", "width": 3, "style": "solid" },
+    "values": [
+      { "value": "G.652-D", "color": "#0000ff", "width": 3, "style": "solid" },
+      { "value": "G.652", "color": "#ff0000", "width": 3, "style": "solid" }
+    ]
+  },
+
+  "_longhaul_switched_to_lmp_example": {
+    "_comment": "This is what management asking to switch Longhaul from fiber_type to lmp looks like: rename this key to 'longhaul' (replacing the block above) -- that's it. No code change. If lmp is a numeric loss value rather than a category, use class-breaks (min/max ranges) instead of unique-value, as shown here.",
+    "type": "unique-value",
+    "field": "lmp",
+    "visible": false,
+    "defaultSymbol": { "color": "#000000", "width": 3, "style": "solid" },
+    "values": [
+      { "value": "Wateen", "color": "#0000ff", "width": 3, "style": "solid" },
+      { "value": "TWA", "color": "#0000ff", "width": 3, "style": "dash-dot" },
+      { "value": "GCS", "color": "#00000a", "width": 3, "style": "solid" },
+      { "value": "SES", "color": "#acc906", "width": 3, "style": "solid" },
+      { "value": "MPPL", "color": "#06c93d", "width": 3, "style": "solid" },
+      { "value": "Jazz", "color": "#c90606", "width": 3, "style": "solid" },
+      { "value": "Nayatel", "color": "#ed2b89", "width": 3, "style": "solid"},
+      { "value": "null", "color": "#f7f7f7", "width": 3, "style": "solid" }
+    ]
+  },
+
+  "dc_odb": {
+    "_comment": "Example for a point layer -- migrate DC.jsx into this shape the same way Longhaul was migrated.",
+    "type": "unique-value",
+    "field": "wf_status",
+    "visible": false,
+    "defaultSymbol": { "type": "simple-marker", "color": "#888888", "size": 8, "markerStyle": "circle" },
+    "values": [
+      { 
+        "value": "As Built",
+        "symbol": {
+              "type": "picture-marker",
+              "url": "images/DC.png",
+              "width": "30px",
+              "height": "15px"
+            }
+      },
+      { 
+        "value": "Design", 
+        "symbol": {
+              "type": "picture-marker",
+              "url": "images/dc1.png",
+              "width": "20px",
+              "height": "14px"
+            }
+      }
+    ]
+  },
+
+  "pop":{
+    "_comment": "Migrate POP.jsx into this shape the same way SC was migrated.",
+    "type": "simple",
+    "visible": true,
+    "defaultSymbol": {
+      "type": "picture-marker",
+      "url": "images/pins/default.png",
+      "width": "20px",
+      "height": "20px"
+     }
+  },
+
+  "Distribution": {
+    "type": "unique-value",
+    "valueExpression": "When($feature.wf_status == 'As Built' && $feature.capacity == '02F', '02F-As Built', $feature.wf_status == 'As Built' && $feature.capacity == '04F', '04F-As Built', $feature.wf_status == 'As Built' && $feature.capacity == '12F', '12F-As Built', $feature.wf_status == 'As Built' && $feature.capacity == '24F', '24F-As Built', $feature.wf_status == 'As Built' && $feature.capacity == '48F', '48F-As Built', $feature.wf_status == 'As Built' && $feature.capacity == '96F', '96F-As Built', $feature.wf_status == 'As Built' && $feature.capacity == '144F', '144F-As Built', $feature.wf_status != 'As Built' && $feature.capacity == '02F', '02F-Design', $feature.wf_status != 'As Built' && $feature.capacity == '04F', '04F-Design', $feature.wf_status != 'As Built' && $feature.capacity == '12F', '12F-Design', $feature.wf_status != 'As Built' && $feature.capacity == '24F', '24F-Design', $feature.wf_status != 'As Built' && $feature.capacity == '48F', '48F-Design', $feature.wf_status != 'As Built' && $feature.capacity == '96F', '96F-Design', $feature.wf_status != 'As Built' && $feature.capacity == '144F', '144F-Design', 'other')",
+    "visible": false,
+    "defaultSymbol": { "type": "simple-line", "color": [150, 150, 150, 1], "width": 1.5, "style": "solid" },
+    "values": [
+      { "value": "02F-As Built", "label": "02F As Built", "type": "simple-line", "color": [46, 117, 182, 1], "width": 1.5, "style": "solid" },
+      { "value": "04F-As Built", "label": "04F As Built", "type": "simple-line", "color": [255, 165, 0, 1], "width": 1.5, "style": "solid" },
+      { "value": "12F-As Built", "label": "12F As Built", "type": "simple-line", "color": [0, 176, 80, 1], "width": 1.5, "style": "solid" },
+      { "value": "24F-As Built", "label": "24F As Built", "type": "simple-line", "color": [150, 75, 0, 1], "width": 2, "style": "solid" },
+      { "value": "48F-As Built", "label": "48F As Built", "type": "simple-line", "color": [255, 0, 0, 1], "width": 2.5, "style": "solid" },
+      { "value": "96F-As Built", "label": "96F As Built", "type": "simple-line", "color": [0, 0, 0, 1], "width": 3.5, "style": "solid" },
+      { "value": "144F-As Built", "label": "144F As Built", "type": "simple-line", "color": [255, 255, 0, 1], "width": 4, "style": "solid" },
+      
+      { "value": "02F-Design", "label": "02F Design", "type": "simple-line", "color": [46, 117, 182, 1], "width": 1.5, "style": "short-dot" },
+      { "value": "04F-Design", "label": "04F Design", "type": "simple-line", "color": [255, 165, 0, 1], "width": 1.5, "style": "short-dot" },
+      { "value": "12F-Design", "label": "12F Design", "type": "simple-line", "color": [0, 176, 80, 1], "width": 1.5, "style": "short-dot" },
+      { "value": "24F-Design", "label": "24F Design", "type": "simple-line", "color": [150, 75, 0, 1], "width": 2, "style": "short-dot" },
+      { "value": "48F-Design", "label": "48F Design", "type": "simple-line", "color": [255, 0, 0, 1], "width": 2.5, "style": "short-dot" },
+      { "value": "96F-Design", "label": "96F Design", "type": "simple-line", "color": [0, 0, 0, 1], "width": 3.5, "style": "short-dot" },
+      { "value": "144F-Design", "label": "144F Design", "type": "simple-line", "color": [255, 255, 0, 1], "width": 4, "style": "short-dot" }
+    ]
+  },
+
+  "Feeder": {
+    "type": "unique-value",
+    "valueExpression": "When($feature.wf_status == 'As Built' && $feature.capacity == '02F', '02F-As Built', $feature.wf_status == 'As Built' && $feature.capacity == '04F', '04F-As Built', $feature.wf_status == 'As Built' && $feature.capacity == '12F', '12F-As Built', $feature.wf_status == 'As Built' && $feature.capacity == '24F', '24F-As Built', $feature.wf_status == 'As Built' && $feature.capacity == '48F', '48F-As Built', $feature.wf_status == 'As Built' && $feature.capacity == '72F', '72F-As Built', $feature.wf_status == 'As Built' && $feature.capacity == '96F', '96F-As Built', $feature.wf_status == 'As Built' && $feature.capacity == '144F', '144F-As Built', $feature.wf_status == 'As Built' && $feature.capacity == '288F', '288F-As Built', $feature.wf_status != 'As Built' && $feature.capacity == '02F', '02F-Design', $feature.wf_status != 'As Built' && $feature.capacity == '04F', '04F-Design', $feature.wf_status != 'As Built' && $feature.capacity == '12F', '12F-Design', $feature.wf_status != 'As Built' && $feature.capacity == '24F', '24F-Design', $feature.wf_status != 'As Built' && $feature.capacity == '48F', '48F-Design', $feature.wf_status != 'As Built' && $feature.capacity == '72F', '72F-Design', $feature.wf_status != 'As Built' && $feature.capacity == '96F', '96F-Design', $feature.wf_status != 'As Built' && $feature.capacity == '144F', '144F-Design', $feature.wf_status != 'As Built' && $feature.capacity == '288F', '288F-Design', 'other')",
+    "visible": false,
+    "defaultSymbol": { "type": "simple-line", "color": [150, 150, 150, 1], "width": 1.5, "style": "solid" },
+    "values": [
+      { "value": "02F-As Built", "label": "02F As Built", "type": "simple-line", "color": [46, 117, 182, 1], "width": 1.5, "style": "solid" },
+      { "value": "04F-As Built", "label": "04F As Built", "type": "simple-line", "color": [255, 165, 0, 1], "width": 1.5, "style": "solid" },
+      { "value": "12F-As Built", "label": "12F As Built", "type": "simple-line", "color": [0, 176, 80, 1], "width": 1.5, "style": "solid" },
+      { "value": "24F-As Built", "label": "24F As Built", "type": "simple-line", "color": [150, 75, 0, 1], "width": 2, "style": "solid" },
+      { "value": "48F-As Built", "label": "48F As Built", "type": "simple-line", "color": [255, 0, 0, 1], "width": 2.5, "style": "solid" },
+      { "value": "72F-As Built", "label": "72F As Built", "type": "simple-line", "color": [188, 0, 195, 1], "width": 3.5, "style": "solid" },
+      { "value": "96F-As Built", "label": "96F As Built", "type": "simple-line", "color": [0, 0, 0, 1], "width": 3.5, "style": "solid" },
+      { "value": "144F-As Built", "label": "144F As Built", "type": "simple-line", "color": [255, 255, 0, 1], "width": 4, "style": "solid" },
+      { "value": "288F-As Built", "label": "288F As Built", "type": "simple-line", "color": [0, 0, 245, 1], "width": 4, "style": "solid" },
+      
+      { "value": "02F-Design", "label": "02F Design", "type": "simple-line", "color": [46, 117, 182, 1], "width": 1.5, "style": "short-dot" },
+      { "value": "04F-Design", "label": "04F Design", "type": "simple-line", "color": [255, 165, 0, 1], "width": 1.5, "style": "short-dot" },
+      { "value": "12F-Design", "label": "12F Design", "type": "simple-line", "color": [0, 176, 80, 1], "width": 1.5, "style": "short-dot" },
+      { "value": "24F-Design", "label": "24F Design", "type": "simple-line", "color": [150, 75, 0, 1], "width": 2, "style": "short-dot" },
+      { "value": "48F-Design", "label": "48F Design", "type": "simple-line", "color": [255, 0, 0, 1], "width": 2.5, "style": "short-dot" },
+      { "value": "72F-Design", "label": "72F Design", "type": "simple-line", "color": [188, 0, 195, 1], "width": 3.5, "style": "short-dot" },
+      { "value": "96F-Design", "label": "96F Design", "type": "simple-line", "color": [0, 0, 0, 1], "width": 3.5, "style": "short-dot" },
+      { "value": "144F-Design", "label": "144F Design", "type": "simple-line", "color": [255, 255, 0, 1], "width": 4, "style": "short-dot" },
+      { "value": "288F-Design", "label": "288F Design", "type": "simple-line", "color": [0, 0, 245, 1], "width": 4, "style": "short-dot" }
+    ]
+  },
+
+  "fat": {
+    "_comment": "Example for a point layer -- migrate DC.jsx into this shape the same way Longhaul was migrated.",
+    "type": "unique-value",
+    "field": "wf_status",
+    "visible": false,
+    "defaultSymbol": { "type": "simple-marker", "color": "#888888", "size": 8, "markerStyle": "circle" },
+    "values": [
+      { 
+        "value": "As Built",
+        "symbol": {
+            "type": "picture-marker",
+            "url": "images/pink_fat.png",
+            "width": "17px",
+            "height": "17px"
+          }
+      },
+      { 
+        "value": "Design",
+        "symbol": {
+            "type": "picture-marker",
+            "url": "images/black_fat.png",
+            "width": "13px",
+            "height": "13px"
+          }
+      }
+    ]
+  },
+
+  "jc": {
+    "_comment": "Example for a point layer -- migrate DC.jsx into this shape the same way Longhaul was migrated.",
+    "type": "unique-value",
+    "field": "wf_status",
+    "visible": false,
+    "defaultSymbol": { "type": "simple-marker", "color": "#888888", "size": 8, "markerStyle": "circle" },
+    "values": [
+      { 
+        "value": "As Built",
+        "symbol": {
+            "type": "picture-marker",
+            "url": "images/jc1.png",
+            "width": "20px",
+            "height": "20px"
+          }
+      },
+      { 
+        "value": "Design", 
+        "symbol": {
+            "type": "picture-marker",
+            "url": "images/JC.png",
+            "width": "20px",
+            "height": "20px"
+          }
+      }
+    ]
+  },
+
+  "site": {
+    "_comment": "Example for a point layer -- migrate DC.jsx into this shape the same way Longhaul was migrated.",
+    "type": "unique-value",
+    "field": "site_type",
+    "visible": false,
+    "defaultSymbol": { "type": "simple-marker", "color": "#888888", "size": 8, "markerStyle": "circle" },
+    "values": [
+      { 
+        "value": "OLA",
+        "symbol": {
+          "type": "picture-marker",
+          "url": "images/OLA.png",
+          "width": "20px",
+          "height": "20px"
+        }
+      },
+      { 
+        "value": "ADM", 
+        "symbol": {
+            "type": "picture-marker",
+            "url": "images/ADM.png",
+            "width": "21px",
+            "height": "21px"
+          }
+      }
+    ]
+  },
+
+  "zones": {
+    "type": "unique-value",
+    "field": "zone",
+    "visible": true,
+    "defaultSymbol": { "type": "simple-fill", "color": [150, 150, 150, 0.4], "style": "solid", "outline": { "color": "white", "width": 0.5 } },
+    "values": [
+      { "value": "Zone 1", "label": "Zone 1", "type": "simple-fill", "color": [200, 133, 68, 0.4], "style": "solid", "outline": { "color": "white", "width": 0.5 } },
+      { "value": "Zone 2", "label": "Zone 2", "type": "simple-fill", "color": [255, 170, 0, 0.4], "style": "solid", "outline": { "color": "white", "width": 0.1 } },
+      { "value": "Zone 3", "label": "Zone 3", "type": "simple-fill", "color": [197, 135, 243, 0.4], "style": "solid", "outline": { "color": "white", "width": 0.1 } },
+      { "value": "Zone 4", "label": "Zone 4", "type": "simple-fill", "color": [0, 168, 132, 0.4], "style": "solid", "outline": { "color": "white", "width": 0.1 } },
+      { "value": "Zone 5", "label": "Zone 5", "type": "simple-fill", "color": [16, 51, 222, 0.4], "style": "solid", "outline": { "color": "white", "width": 0.1 } },
+      { "value": "Zone 6", "label": "Zone 6", "type": "simple-fill", "color": [199, 255, 11, 0.4], "style": "solid", "outline": { "color": "white", "width": 0.1 } }
+    ]
+  },
+
+  "conduit":{
+    "type": "simple",
+    "defaultSymbol": {
+        "type": "simple-line", 
+        "style": "solid",
+        "cap":"round",
+        "join":"round",
+        "color": "#ffa500"
+      }
+  },
+   "hh":{
+    "type": "simple",
+    "defaultSymbol": {
+        "type": "simple-marker", 
+        "style": "square",       
+        "color": "#191919",      
+        "size": "5.5px",
+        "outline": {
+          "color": "#e9e5e5", 
+          "width": 0.4         
+        }
+      }
+  }
+}

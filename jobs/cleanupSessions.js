@@ -11,15 +11,15 @@
 // stuck behind "you're already logged in elsewhere" with no session
 // left to actually log out of.
 
-const { pool } = require("../db/db");
+const { pool, SESSION_IDLE_MS } = require("../db/db");
 
 const CLEANUP_INTERVAL_MS = 15 * 60 * 1000; // every 15 minutes
 
 async function cleanupSessions() {
     try {
-        // 1. Defensive: remove session rows the store itself considers
-        //    expired, in case pruning is ever disabled/misconfigured.
-        const expired = await pool.query('DELETE FROM session WHERE expire < NOW()');
+        // 1. Remove expired sessions (the store's own pruning is off, see
+        //    db/db.js) and log each signed-in one as auth.session_timeout.
+        const expired = await removeExpiredSessions();
 
         // 2. Clear orphaned pointers: a user's current_session_id that
         //    references a session row that no longer exists.
@@ -34,7 +34,7 @@ async function cleanupSessions() {
 
         if (expired.rowCount || orphaned.rowCount) {
             console.log(
-                `[session-cleanup] removed ${expired.rowCount} expired session row(s), ` +
+                `[session-cleanup] ended ${expired.rowCount} expired session(s), ` +
                 `cleared ${orphaned.rowCount} orphaned pointer(s)`
             );
         }
@@ -43,9 +43,36 @@ async function cleanupSessions() {
     }
 }
 
+// A session expires SESSION_IDLE_MS after its last request, so that is when
+// the user actually stopped -- the row is dated then, not now. The user's id is
+// checked against dashboard_users because the account may have been deleted.
+async function removeExpiredSessions() {
+    try {
+        return await pool.query(`
+            WITH gone AS (
+                DELETE FROM session WHERE expire < NOW() RETURNING sid, sess, expire
+            )
+            INSERT INTO user_logs (created_at, user_id, username, action, status, session_id)
+            SELECT expire - ($1::int * INTERVAL '1 millisecond'),
+                   (SELECT id FROM dashboard_users WHERE id = (sess->'user'->>'id')::int),
+                   sess->'user'->>'username',
+                   'auth.session_timeout',
+                   'success',
+                   left(encode(sha256(convert_to(sid, 'UTF8')), 'hex'), 16)
+              FROM gone
+             WHERE sess->'user' IS NOT NULL
+        `, [SESSION_IDLE_MS]);
+    } catch (err) {
+        // Most likely user_logs does not exist yet. Expired sessions still
+        // have to go, so fall back to deleting them without logging.
+        console.error("[session-cleanup] could not log timeouts:", err.message);
+        return pool.query('DELETE FROM session WHERE expire < NOW()');
+    }
+}
+
 function startSessionCleanupJob() {
     cleanupSessions(); // run once at boot so orphans don't linger until the first interval
     return setInterval(cleanupSessions, CLEANUP_INTERVAL_MS);
 }
 
-module.exports = { startSessionCleanupJob, cleanupSessions };
+module.exports = { startSessionCleanupJob };

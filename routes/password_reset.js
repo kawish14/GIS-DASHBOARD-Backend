@@ -20,11 +20,12 @@ const router = express.Router();
 const { pool } = require('../db/db');
 const { validatePasswordStrength, hashPassword } = require('../utils/password');
 const { rateLimit, refundRateLimit } = require('../utils/rateLimiter');
+const { logActivity, ACTIONS } = require('../utils/activityLog');
 const {
   normalizeEmail, isPlausibleEmail, issueToken, tokenMatches, isExpired,
 } = require('../utils/tokens');
 const {
-  sendPasswordResetEmail, sendInvitationEmail, getRegistrationUrl, getLoginUrl,
+  sendPasswordResetEmail, sendInvitationEmail, getLoginUrl,
 } = require('../utils/mailer');
 
 // Long enough to find the mail and act on it, short enough that a link left in
@@ -84,14 +85,18 @@ router.post(
       );
 
       const user = rows[0];
+      const log = (status, details) =>
+        logActivity(req, ACTIONS.PASSWORD_RESET_REQUEST, { status, user, details: { email, ...details } });
 
       // No account for this address: say so, rather than leaving them waiting
       // on a link that is never coming.
       if (!user) {
+        log('failure', { reason: 'not_registered' });
         return res.status(404).json({ error: NOT_REGISTERED_MESSAGE, code: 'NOT_REGISTERED' });
       }
 
       if (user.status === 'disabled') {
+        log('failure', { reason: 'account_disabled' });
         return res.status(403).json({
           error: 'This account has been disabled. Please contact your GIS Admin.',
           code: 'ACCOUNT_DISABLED',
@@ -109,6 +114,7 @@ router.post(
           expiresAt: user.invite_expires_at,
         });
         console.log(`Forgot-password for a pending invitation (${user.email}); re-sent the invitation.`);
+        log('success', { outcome: 'invitation_resent' });
         return res.json({
           success: true,
           code: 'INVITATION_RESENT',
@@ -137,12 +143,14 @@ router.post(
       // A reset the user cannot act on is worse than an error: the link only
       // ever exists in that email, so if it did not go out, say so.
       if (!mail.sent) {
+        log('failure', { reason: 'mail_failed' });
         return res.status(502).json({
           error: `We could not send the reset email: ${mail.reason} Please contact your GIS Admin.`,
           code: 'MAIL_FAILED',
         });
       }
 
+      log('success', { outcome: 'reset_link_sent' });
       return res.json({
         success: true,
         message: `A reset link is on its way to ${user.email}. Check your inbox, and your spam folder.`,
@@ -231,6 +239,11 @@ router.post(
 
       if (!usable) {
         await client.query('ROLLBACK');
+        logActivity(req, ACTIONS.PASSWORD_RESET, {
+          status: 'failure',
+          user,
+          details: { email, reason: 'invalid_or_expired_token' },
+        });
         return res.status(401).json({
           error: 'This reset link has expired or has already been used. Please request a new one.',
           code: 'INVALID_TOKEN',
@@ -263,6 +276,7 @@ router.post(
       await client.query('COMMIT');
 
       console.log(`Password reset completed for ${user.username}`);
+      logActivity(req, ACTIONS.PASSWORD_RESET, { user, details: { email } });
       refundRateLimit(req);
 
       return res.json({

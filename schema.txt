@@ -55,3 +55,116 @@ CREATE TABLE public."session" (
 	CONSTRAINT session_pkey PRIMARY KEY (sid)
 );
 CREATE INDEX "IDX_session_expire" ON public.session USING btree (expire);
+
+
+-- User activity log, written by utils/activityLog.js. One row per action:
+-- sign-ins (successful and failed), sign-outs, registrations, password resets,
+-- and every change made from the admin panel.
+--
+-- user_id is SET NULL when the account is deleted, and username is a copy taken
+-- at the time, so a deleted user's history still says who it was. For a failed
+-- sign-in under a name that does not exist, user_id is NULL and username is
+-- what was typed.
+--
+-- details holds whatever is specific to the action, e.g.
+--   {"reason": "invalid_credentials"}            on a failed login
+--   {"target_user_id": 12, "target_username": "ali.raza", "new_status": "disabled"}
+CREATE TABLE public.user_logs (
+	id bigserial NOT NULL,
+	created_at timestamptz DEFAULT now() NOT NULL,
+	user_id int4 NULL,
+	username varchar(100) NULL,
+	action varchar(50) NOT NULL,                    -- see ACTIONS in utils/activityLog.js
+	status varchar(10) DEFAULT 'success' NOT NULL,  -- success | failure
+	ip_address varchar(64) NULL,
+	device varchar(150) NULL,                       -- "Chrome on Windows"
+	user_agent text NULL,
+	details jsonb NULL,
+	session_id varchar(16) NULL,                    -- same value on every row of one sign-in (a hash, not the real id)
+	CONSTRAINT user_logs_pkey PRIMARY KEY (id),
+	CONSTRAINT user_logs_status_check CHECK (status IN ('success', 'failure')),
+	CONSTRAINT user_logs_user_id_fkey FOREIGN KEY (user_id) REFERENCES public.dashboard_users(id) ON DELETE SET NULL
+);
+
+CREATE INDEX user_logs_created_at_idx ON public.user_logs (created_at DESC);
+CREATE INDEX user_logs_user_id_idx ON public.user_logs (user_id, created_at DESC);
+CREATE INDEX user_logs_action_idx ON public.user_logs (action, created_at DESC);
+CREATE INDEX user_logs_session_id_idx ON public.user_logs (session_id) WHERE session_id IS NOT NULL;
+
+-- If user_logs already exists from before session tracking, add the column with:
+--   ALTER TABLE public.user_logs ADD COLUMN session_id varchar(16) NULL;
+--   CREATE INDEX user_logs_session_id_idx ON public.user_logs (session_id) WHERE session_id IS NOT NULL;
+-- Sign-ins from before that have no session_id and do not appear in user_sessions.
+
+
+-- One row per sign-in, with how long it lasted. Built from user_logs: a session
+-- starts at its auth.login row and ends at the first of
+--   auth.logout           the user signed out
+--   auth.session_timeout  no requests for 30 minutes; dated at the last request,
+--                         so the idle half hour is not counted
+--   auth.session_ended    turned out: account disabled, or password reset
+-- A session that has not ended yet (is_active) runs up to its last request,
+-- read from the session table. The cleanup job logs a timeout within 15
+-- minutes of a session expiring, so a row with no end and no live session is
+-- only seen briefly (or for sessions removed by hand). The 30 minutes below must match
+-- SESSION_IDLE_MS in db/db.js.
+CREATE VIEW public.user_sessions AS
+SELECT s.session_id,
+       s.user_id,
+       s.username,
+       s.device,
+       s.ip_address,
+       s.created_at AS started_at,
+       GREATEST(s.created_at, COALESCE(e.created_at, live.expire - INTERVAL '30 minutes')) AS ended_at,
+       replace(e.action, 'auth.', '') AS end_reason,     -- logout | session_timeout | session_ended | NULL while active
+       e.created_at IS NULL AND live.sid IS NOT NULL AS is_active,
+       GREATEST(s.created_at, COALESCE(e.created_at, live.expire - INTERVAL '30 minutes')) - s.created_at AS duration
+  FROM public.user_logs s
+  LEFT JOIN LATERAL (
+        SELECT created_at, action
+          FROM public.user_logs
+         WHERE session_id = s.session_id
+           AND action IN ('auth.logout', 'auth.session_timeout', 'auth.session_ended')
+         ORDER BY created_at
+         LIMIT 1
+  ) e ON true
+  LEFT JOIN public.session live
+         ON e.created_at IS NULL
+        AND left(encode(sha256(convert_to(live.sid, 'UTF8')), 'hex'), 16) = s.session_id
+ WHERE s.action = 'auth.login'
+   AND s.status = 'success'
+   AND s.session_id IS NOT NULL;
+
+-- Example questions the log answers:
+--
+-- Failed sign-ins per account in the last 24 hours (brute-force check):
+--   SELECT username, ip_address, count(*) FROM user_logs
+--    WHERE action = 'auth.login' AND status = 'failure' AND created_at > now() - interval '1 day'
+--    GROUP BY username, ip_address ORDER BY count(*) DESC;
+--
+-- Busiest hours of the day for sign-ins:
+--   SELECT extract(hour FROM created_at) AS hour, count(*) FROM user_logs
+--    WHERE action = 'auth.login' AND status = 'success' GROUP BY 1 ORDER BY 1;
+--
+-- Everything the admins changed this month:
+--   SELECT created_at, username, action, details FROM user_logs
+--    WHERE action LIKE 'admin.%' AND created_at > date_trunc('month', now()) ORDER BY created_at DESC;
+--
+-- One user's full history:
+--   SELECT * FROM user_logs WHERE user_id = 12 ORDER BY created_at DESC;
+--
+-- Every session, newest first, with how long it lasted:
+--   SELECT username, started_at, ended_at, duration, end_reason FROM user_sessions ORDER BY started_at DESC;
+--
+-- Time each user spent signed in today. Sessions crossing midnight count only
+-- the part after it. For the past two days use date_trunc('day', now()) - interval '1 day'.
+--   SELECT username,
+--          count(*) AS sessions,
+--          sum(least(ended_at, now()) - greatest(started_at, date_trunc('day', now()))) AS time_spent
+--     FROM user_sessions
+--    WHERE ended_at > date_trunc('day', now())
+--    GROUP BY username ORDER BY time_spent DESC;
+--
+-- Average session length per user over the last 30 days:
+--   SELECT username, avg(duration) FROM user_sessions
+--    WHERE started_at > now() - interval '30 days' GROUP BY username;
