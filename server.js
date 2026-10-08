@@ -11,6 +11,7 @@ const passwordResetRoutes = require('./routes/password_reset');
 const adminRoutes = require('./routes/admin_routes');
 const nce = require('./routes/nce_history');
 const { startSessionCleanupJob } = require('./jobs/cleanupSessions');
+const { startLogRetentionJob } = require('./utils/activityLog');
 
 const allowedOrigins = [
   'http://localhost:5173',
@@ -57,6 +58,9 @@ app.use('/nce', nce);
 // exist. Without it those dangling pointers leave a user locked out by
 // "you're already logged in elsewhere" with no session left to log out of.
 startSessionCleanupJob();
+
+// Deletes user_logs rows older than USER_LOG_RETENTION_DAYS (default 365).
+startLogRetentionJob();
 
 const PORT = Number(process.env.PORT) || 2000;
 app.listen(PORT, () => {

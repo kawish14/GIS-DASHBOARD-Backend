@@ -1,4 +1,5 @@
 const { pool } = require("../db/db");
+const { logActivity, ACTIONS } = require("../utils/activityLog");
 
 const isAuthenticated = async (req, res, next) => {
     // 1. Check if session exists at all
@@ -23,6 +24,7 @@ const isAuthenticated = async (req, res, next) => {
         // it here rather than only at login, so revoking access takes effect
         // on the next request instead of the next sign-in.
         if (status !== 'active') {
+            logActivity(req, ACTIONS.SESSION_ENDED, { status: 'failure', details: { reason: 'account_disabled' } });
             req.session.destroy(() => {});
             res.clearCookie("connect.sid");
             return res.status(403).json({ error: "This account is no longer active." });
@@ -31,6 +33,7 @@ const isAuthenticated = async (req, res, next) => {
         // 3. THE MAGIC CHECK: If the IDs don't match, they logged in somewhere else!
         if (dbSessionId !== req.sessionID) {
             console.log(`Destroying stale session for ${req.session.user.username}`);
+            logActivity(req, ACTIONS.SESSION_ENDED, { status: 'failure', details: { reason: 'session_replaced_or_revoked' } });
             req.session.destroy(); // Kill old session
             res.clearCookie("connect.sid"); // Clear their cookie
             return res.status(401).json({ error: "Logged in from another device." });

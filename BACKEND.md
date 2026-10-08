@@ -8,9 +8,9 @@ the source rather than from memory.
 - **Database:** PostgreSQL (`db/db.js`), sessions stored in the `session` table
 - **Frontend repo:** `GIS-DASHBOARD` — the paths below refer to files in it
 - **Start:** `npm install && npm start` (nodemon)
-- **Size:** 21 routes across 5 routers, plus `routes/auth.js` (middleware, not a
-  router) and 5 helpers in `utils/`. Every route has a frontend caller — see §3
-  for what was removed to get here.
+- **Size:** 22 routes across 5 routers, plus `routes/auth.js` (middleware, not a
+  router) and 6 helpers in `utils/`. Every route but `GET /admin/logs` has a
+  frontend caller — see §3 for what was removed to get here.
 
 ---
 
@@ -107,7 +107,7 @@ changing a password signs the account out everywhere.
 
 ### 2.4 `/admin` — user and role administration · `routes/admin_routes.js`
 
-Every route below is guarded by `isAuthenticated, isAdmin`. All are called from
+Every route below is guarded by `isAuthenticated, isAdmin`. All but `/admin/logs` are called from
 the single file **`features/admin/AdminPage.jsx`**:
 
 | Method | Path | AdminPage function |
@@ -124,6 +124,7 @@ the single file **`features/admin/AdminPage.jsx`**:
 | PUT | `/admin/roles/:id` | `handleSaveRole()` |
 | DELETE | `/admin/roles/:id` | `executeDirectDelete()` |
 | POST | `/admin/roles/:id/reassign-and-delete` | `handleConfirmReassignAndDelete()` |
+| GET | `/admin/logs` | *not called yet* — reads the activity log, see §5.3 |
 
 `POST /admin/users/invite` and `POST /admin/users` both generate the username
 (see `utils/usernameGenerator.js`) and send an email. Neither fails if the mail
@@ -143,7 +144,8 @@ The only route here that had a caller. It reads `webappPool`, not `pool` — see
 ## 3. What was removed, and how to get it back
 
 Everything below had **no caller in the frontend** and has been deleted. Recover
-any of it from git history — nothing was rewritten, only removed.
+any of it from git history — commit `65ad5ce` is the last one that still has all
+of the files.
 
 | Removed | Was | Why |
 |---|---|---|
@@ -173,7 +175,7 @@ not have it.
 |---|---|---|
 | `server.js` | dotenv, CORS allowlist, session middleware, route mounts, listens on 2000 | — |
 | `db/db.js` | Two Postgres pools and the `express-session` store — see 5.1 | every route file, `jobs/cleanupSessions.js` |
-| `routes/auth.js` | `isAuthenticated` and `isAdmin` middleware. Not a router. | `user_auth`, `admin_routes`, `nce_history`, `customer_service`, `faultplayback` |
+| `routes/auth.js` | `isAuthenticated` and `isAdmin` middleware. Not a router. | `user_auth`, `admin_routes`, `nce_history` |
 | `jobs/cleanupSessions.js` | Clears `current_session_id` values pointing at sessions that no longer exist. Runs at boot and every 15 min. | `server.js` |
 
 `isAuthenticated` does more than check the cookie: it re-reads the user each
@@ -201,6 +203,7 @@ Every router is mounted and every one has a caller. Nothing here is dead.
 | `password.js` | bcrypt hashing (cost 10) and the strength policy the register and reset screens mirror | `registration.js`, `password_reset.js` |
 | `tokens.js` | Random tokens, SHA-256 storage, timing-safe comparison, expiry check | `registration.js`, `password_reset.js` |
 | `rateLimiter.js` | Fixed-window limiter for the unauthenticated endpoints, with `refundRateLimit` so a mistyped password is not charged like a guessed token | `registration.js`, `password_reset.js` |
+| `activityLog.js` | `logActivity(req, action, …)` writes one row to `user_logs`; `ACTIONS` lists every action name. Never throws. Also deletes rows past the retention period. | every router, `routes/auth.js`, `server.js` |
 | `mailer.js` | The three outgoing emails: invitation, credentials, password reset. Never throws — returns `{ sent, reason }`. | `admin_routes.js`, `password_reset.js` |
 
 ---
@@ -240,6 +243,38 @@ types one by hand — the generator only ever emits lowercase.
 device is refused with 403. Tabs in one browser share the cookie, so they share
 the session and need no second sign-in.
 
+### 5.3 User activity log
+
+Every sign-in (successful or failed), sign-out, registration, password reset,
+admin-panel change and alarm-analytics query writes one row to **`user_logs`**
+(table in `schema.txt`), through `utils/activityLog.js`.
+
+**Why a table and not a `.log` file:** the point of the log is to ask it
+questions later: failed sign-ins per account, who disabled a user, the busiest
+hours. In Postgres that is a `WHERE`/`GROUP BY` with indexes, it can be served to
+the admin panel (`GET /admin/logs`), and it joins to `dashboard_users`. A text
+file would have to be rotated, parsed and grepped for the same answers.
+Errors and debug output still go to the console.
+
+| Column | Holds |
+|---|---|
+| `created_at` | When |
+| `user_id`, `username` | Who. `username` is a copy taken at the time, so it survives the account being deleted (`user_id` becomes `NULL`). |
+| `action` | `<area>.<event>`, e.g. `auth.login`, `admin.user_delete`. The full list is `ACTIONS` in `utils/activityLog.js`. |
+| `status` | `success` or `failure` |
+| `ip_address`, `device`, `user_agent` | Where from. `device` is the readable label, e.g. `Chrome on Windows`. |
+| `details` | JSON for anything action-specific: the failure `reason`, the `target_user_id` of an admin change, the filters used. Passwords and tokens are never logged. |
+
+To log something new: add a name to `ACTIONS`, then call
+`logActivity(req, ACTIONS.YOUR_ACTION, { details: { … } })` where it happens.
+Pass `status: 'failure'` for a refusal, and `user` when there is no signed-in
+session to take it from.
+
+Logging is fire-and-forget: a failed insert prints `[user-log] could not record …`
+and the request carries on, so a broken log never stops anyone signing in.
+
+`schema.txt` ends with example queries for common patterns.
+
 ---
 
 ## 6. Configuration
@@ -248,11 +283,11 @@ the session and need no second sign-in.
 
 | Key | Purpose |
 |---|---|
-| `PORT` | Read from `.env`, though `server.js` currently hardcodes 2000 |
-| `APP_BASE_URL` | Where the dashboard is served. Emails link to `<this>/register` and `<this>/reset-password`. Defaults to `http://172.29.100.28:5173`. |
+| `PORT` | Port to listen on. Defaults to 2000. |
+| `APP_BASE_URL` | Where the dashboard is served. Emails link to `<this>/register` and `<this>/reset-password`. Defaults to `http://gis.tes.com.pk:5001`. |
 | `SMTP_HOST` / `PORT` / `SECURE` / `USER` / `PASS` | Mail server. Leave `SMTP_HOST` blank and invitations still work — the admin panel shows the link to pass on by hand. |
 | `MAIL_FROM` | `From:` header |
-| `GEMINI_API_KEY` | Only for `routes/gemini.js`, which is not mounted |
+| `USER_LOG_RETENTION_DAYS` | Days to keep `user_logs` rows; older ones are deleted daily. Default 365, `0` keeps them forever. |
 
 `server.js` also holds a hardcoded CORS allowlist. A new frontend origin has to
 be added there or the browser will block it.

@@ -1,10 +1,11 @@
 const express = require("express");
 const router = express.Router();
-const bcrypt = require("bcrypt");
 const { pool } = require("../db/db"); 
 const {isAuthenticated, isAdmin} = require("./auth");
 const { sendInvitationEmail, sendCredentialsEmail, getRegistrationUrl, getLoginUrl } = require("../utils/mailer");
 const { generateUniqueUsername } = require("../utils/usernameGenerator");
+const { hashPassword } = require("../utils/password");
+const { logActivity, ACTIONS } = require("../utils/activityLog");
 
 // How long an invitation stays open before the admin has to re-issue it.
 const INVITE_VALIDITY_DAYS = 2;
@@ -152,6 +153,10 @@ router.post('/users/invite', isAuthenticated, isAdmin, async (req, res) => {
             expiresAt: invited.invite_expires_at,
         });
 
+        logActivity(req, ACTIONS.USER_INVITE, {
+            details: { target_user_id: invited.id, target_username: invited.username, email: invited.email, role, email_sent: mail.sent },
+        });
+
         res.status(201).json({
             ...invited,
             emailSent: mail.sent,
@@ -203,6 +208,10 @@ router.post('/users/:id/reinvite', isAuthenticated, isAdmin, async (req, res) =>
             expiresAt: renewed.invite_expires_at,
         });
 
+        logActivity(req, ACTIONS.USER_REINVITE, {
+            details: { target_user_id: renewed.id, target_username: renewed.username, email: renewed.email, email_sent: mail.sent },
+        });
+
         res.json({
             ...renewed,
             emailSent: mail.sent,
@@ -248,7 +257,7 @@ router.post('/users', isAuthenticated, isAdmin, async (req, res) => {
         }
         const roleId = roleResult.rows[0].id;
 
-        const hash = await bcrypt.hash(password, 10);
+        const hash = await hashPassword(password);
 
         // 2. Insert the user using the role_id. Created this way the account is
         //    complete, so it starts out active rather than invited. Generating
@@ -306,6 +315,10 @@ router.post('/users', isAuthenticated, isAdmin, async (req, res) => {
             role,
         });
 
+        logActivity(req, ACTIONS.USER_CREATE, {
+            details: { target_user_id: created.id, target_username: created.username, email: created.email, role, email_sent: mail.sent },
+        });
+
         res.json({
             ...created,
             emailSent: mail.sent,
@@ -343,7 +356,7 @@ router.put('/users/:id', isAuthenticated, isAdmin, async (req, res) => {
         }
         const roleId = roleResult.rows[0].id;
 
-        const target = await pool.query('SELECT status FROM dashboard_users WHERE id = $1', [id]);
+        const target = await pool.query('SELECT status, username FROM dashboard_users WHERE id = $1', [id]);
         if (target.rows.length === 0) {
             return res.status(404).json({ error: "User not found" });
         }
@@ -361,7 +374,7 @@ router.put('/users/:id', isAuthenticated, isAdmin, async (req, res) => {
             assignments.push(`username = $${values.length}`);
         }
         if (setPassword) {
-            values.push(await bcrypt.hash(password, 10));
+            values.push(await hashPassword(password));
             assignments.push(`password_hash = $${values.length}`);
         }
 
@@ -377,6 +390,18 @@ router.put('/users/:id', isAuthenticated, isAdmin, async (req, res) => {
             `UPDATE dashboard_users SET ${assignments.join(', ')} WHERE id = $${values.length}`,
             values
         );
+
+        // Which fields were sent, never their values -- a password must not
+        // end up in the log.
+        logActivity(req, ACTIONS.USER_UPDATE, {
+            details: {
+                target_user_id: Number(id),
+                target_username: setUsername ? username.trim() : target.rows[0].username,
+                full_name, email, role,
+                username_changed: setUsername,
+                password_changed: setPassword,
+            },
+        });
 
         res.json({ message: "User updated successfully" });
     } catch (err) {
@@ -428,6 +453,10 @@ router.patch('/users/:id/status', isAuthenticated, isAdmin, async (req, res) => 
             });
         }
 
+        logActivity(req, ACTIONS.USER_STATUS_CHANGE, {
+            details: { target_user_id: result.rows[0].id, target_username: result.rows[0].username, new_status: status },
+        });
+
         res.json({ ...result.rows[0], success: true });
     } catch (err) {
         console.error("Status Update Error:", err);
@@ -443,7 +472,18 @@ router.delete('/users/:id', isAuthenticated, isAdmin, async (req, res) => {
         return res.status(400).json({ error: "You cannot delete your own account." });
     }
 
-    await pool.query('DELETE FROM dashboard_users WHERE id = $1', [req.params.id]);
+    const deleted = await pool.query(
+        'DELETE FROM dashboard_users WHERE id = $1 RETURNING id, username, email',
+        [req.params.id]
+    );
+
+    if (deleted.rows.length > 0) {
+        const { id, username, email } = deleted.rows[0];
+        logActivity(req, ACTIONS.USER_DELETE, {
+            details: { target_user_id: id, target_username: username, email },
+        });
+    }
+
     res.json({ success: true });
 });
 
@@ -481,6 +521,10 @@ router.post('/roles', isAuthenticated, isAdmin, async (req, res) => {
             [role_name.toLowerCase().trim(), JSON.stringify(defaultPermissions)]
         );
         
+        logActivity(req, ACTIONS.ROLE_CREATE, {
+            details: { role_id: result.rows[0].id, role_name: role_name.toLowerCase().trim() },
+        });
+
         res.json({ id: result.rows[0].id, message: "Role created successfully" });
     } catch (err) {
         console.error("Create Role Error:", err);
@@ -512,6 +556,14 @@ router.put('/roles/:id', isAuthenticated, isAdmin, async (req, res) => {
             );
         }
         
+        logActivity(req, ACTIONS.ROLE_UPDATE, {
+            details: {
+                role_id: Number(req.params.id),
+                new_role_name: role_name ? role_name.toLowerCase().trim() : undefined,
+                permissions: permissions || undefined,
+            },
+        });
+
         res.json({ message: "Role updated successfully" });
     } catch (err) {
         console.error("Role Update Error:", err);
@@ -539,6 +591,11 @@ router.delete('/roles/:id', isAuthenticated, isAdmin, async (req, res) => {
 
         // 2. Proceed with deletion if it's not admin
         await pool.query('DELETE FROM roles WHERE id = $1', [req.params.id]);
+
+        logActivity(req, ACTIONS.ROLE_DELETE, {
+            details: { role_id: Number(req.params.id), role_name: roleCheck.rows[0].role_name },
+        });
+
         res.json({ success: true, message: "Role deleted successfully" });
     } catch (err) {
         console.error("Delete Role Error:", err);
@@ -570,7 +627,7 @@ router.post('/roles/:id/reassign-and-delete', isAuthenticated, isAdmin, async (r
         }
 
         // 2. Reassign all users from the old role to the new role
-        await pool.query(
+        const moved = await pool.query(
             'UPDATE dashboard_users SET role_id = $1 WHERE role_id = $2',
             [new_role_id, oldRoleId]
         );
@@ -578,10 +635,70 @@ router.post('/roles/:id/reassign-and-delete', isAuthenticated, isAdmin, async (r
         // 3. Delete the old role
         await pool.query('DELETE FROM roles WHERE id = $1', [oldRoleId]);
 
+        logActivity(req, ACTIONS.ROLE_REASSIGN_DELETE, {
+            details: {
+                role_id: Number(oldRoleId),
+                role_name: roleCheck.rows[0]?.role_name,
+                new_role_id: Number(new_role_id),
+                users_moved: moved.rowCount,
+            },
+        });
+
         res.json({ success: true, message: "Users reassigned and role deleted successfully." });
     } catch (err) {
         console.error("Reassign & Delete Error:", err);
         res.status(500).json({ error: "Failed to reassign users and delete role." });
+    }
+});
+
+/******************************* ACTIVITY LOG *********************************/
+
+// Read the user activity log, newest first. Every filter is optional:
+//
+//   GET /admin/logs?user_id=12
+//   GET /admin/logs?action=admin.%                    (% matches anything)
+//   GET /admin/logs?action=auth.login&status=failure&from=2026-10-01
+//   GET /admin/logs?username=ali&limit=50&offset=50   (username is a partial match)
+router.get('/logs', isAuthenticated, isAdmin, async (req, res) => {
+    const { user_id, username, action, status, from, to } = req.query;
+    const limit = Math.min(Number(req.query.limit) || 100, 1000);
+    const offset = Number(req.query.offset) || 0;
+
+    const conditions = [];
+    const values = [];
+    const addFilter = (sql, value) => {
+        values.push(value);
+        conditions.push(sql.replace('?', `$${values.length}`));
+    };
+
+    if (user_id)  addFilter('user_id = ?', Number(user_id));
+    if (username) addFilter('username ILIKE ?', `%${username}%`);
+    if (action)   addFilter('action LIKE ?', action);
+    if (status)   addFilter('status = ?', status);
+    if (from)     addFilter('created_at >= ?', from);
+    if (to)       addFilter('created_at <= ?', to);
+
+    const where = conditions.length ? `WHERE ${conditions.join(' AND ')}` : '';
+
+    try {
+        values.push(limit, offset);
+        const result = await pool.query(
+            `SELECT id, created_at, user_id, username, action, status, ip_address, device, details,
+                    count(*) OVER () AS total
+               FROM user_logs
+               ${where}
+              ORDER BY created_at DESC
+              LIMIT $${values.length - 1} OFFSET $${values.length}`,
+            values
+        );
+
+        res.json({
+            total: Number(result.rows[0]?.total || 0),
+            logs: result.rows.map(({ total, ...row }) => row),
+        });
+    } catch (err) {
+        console.error("Fetch Logs Error:", err);
+        res.status(500).json({ error: "Failed to fetch activity log" });
     }
 });
 

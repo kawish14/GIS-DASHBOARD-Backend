@@ -60,10 +60,4 @@ function hashPassword(password) {
   return bcrypt.hash(password, BCRYPT_ROUNDS);
 }
 
-module.exports = {
-  BCRYPT_ROUNDS,
-  MIN_PASSWORD_LENGTH,
-  MAX_PASSWORD_LENGTH,
-  validatePasswordStrength,
-  hashPassword,
-};
+module.exports = { validatePasswordStrength, hashPassword };
