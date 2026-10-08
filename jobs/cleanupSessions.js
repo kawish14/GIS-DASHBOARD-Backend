@@ -48,4 +48,4 @@ function startSessionCleanupJob() {
     return setInterval(cleanupSessions, CLEANUP_INTERVAL_MS);
 }
 
-module.exports = { startSessionCleanupJob, cleanupSessions };
+module.exports = { startSessionCleanupJob };

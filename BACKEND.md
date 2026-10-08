@@ -144,7 +144,8 @@ The only route here that had a caller. It reads `webappPool`, not `pool` — see
 ## 3. What was removed, and how to get it back
 
 Everything below had **no caller in the frontend** and has been deleted. Recover
-any of it from git history — nothing was rewritten, only removed.
+any of it from git history — commit `65ad5ce` is the last one that still has all
+of the files.
 
 | Removed | Was | Why |
 |---|---|---|
@@ -174,7 +175,7 @@ not have it.
 |---|---|---|
 | `server.js` | dotenv, CORS allowlist, session middleware, route mounts, listens on 2000 | — |
 | `db/db.js` | Two Postgres pools and the `express-session` store — see 5.1 | every route file, `jobs/cleanupSessions.js` |
-| `routes/auth.js` | `isAuthenticated` and `isAdmin` middleware. Not a router. | `user_auth`, `admin_routes`, `nce_history`, `customer_service`, `faultplayback` |
+| `routes/auth.js` | `isAuthenticated` and `isAdmin` middleware. Not a router. | `user_auth`, `admin_routes`, `nce_history` |
 | `jobs/cleanupSessions.js` | Clears `current_session_id` values pointing at sessions that no longer exist. Runs at boot and every 15 min. | `server.js` |
 
 `isAuthenticated` does more than check the cookie: it re-reads the user each
@@ -282,12 +283,11 @@ and the request carries on, so a broken log never stops anyone signing in.
 
 | Key | Purpose |
 |---|---|
-| `PORT` | Read from `.env`, though `server.js` currently hardcodes 2000 |
-| `APP_BASE_URL` | Where the dashboard is served. Emails link to `<this>/register` and `<this>/reset-password`. Defaults to `http://172.29.100.28:5173`. |
+| `PORT` | Port to listen on. Defaults to 2000. |
+| `APP_BASE_URL` | Where the dashboard is served. Emails link to `<this>/register` and `<this>/reset-password`. Defaults to `http://gis.tes.com.pk:5001`. |
 | `SMTP_HOST` / `PORT` / `SECURE` / `USER` / `PASS` | Mail server. Leave `SMTP_HOST` blank and invitations still work — the admin panel shows the link to pass on by hand. |
 | `MAIL_FROM` | `From:` header |
 | `USER_LOG_RETENTION_DAYS` | Days to keep `user_logs` rows; older ones are deleted daily. Default 365, `0` keeps them forever. |
-| `GEMINI_API_KEY` | Only for `routes/gemini.js`, which is not mounted |
 
 `server.js` also holds a hardcoded CORS allowlist. A new frontend origin has to
 be added there or the browser will block it.

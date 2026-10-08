@@ -335,7 +335,7 @@ router.post(
 
         if (isUsernameCollision && attempt < MAX_USERNAME_ATTEMPTS) {
           console.warn(`Username collision on attempt ${attempt}, regenerating.`);
-          continue; // eslint-disable-line no-continue
+          continue;
         }
 
         console.error('Complete Signup Error:', err);

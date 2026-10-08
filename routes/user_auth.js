@@ -3,16 +3,11 @@ const router = express.Router();
 const bcrypt = require("bcrypt");
 const { pool } = require("../db/db"); 
 const { isAuthenticated } = require("./auth");
-const { UAParser } = require('ua-parser-js');
-const { logActivity, ACTIONS } = require("../utils/activityLog");
-//const enforceAbsoluteTimeout = require('./sessionEnforcer')
+const { logActivity, ACTIONS, describeDevice } = require("../utils/activityLog");
 
 router.post("/login", async (req, res) => {
   const { username, password } = req.body;
-  const parser = new UAParser(req.headers['user-agent']);
-  const { browser, os } = parser.getResult();
-  const deviceLabel = `${browser.name || 'Unknown browser'} on ${os.name || 'Unknown OS'}`;
-  
+  const deviceLabel = describeDevice(req.headers['user-agent']) || 'Unknown device';
 
   try {
     // status = 'active' excludes accounts that were invited but never
@@ -52,10 +47,10 @@ router.post("/login", async (req, res) => {
         if (isAlreadyLoggedIn) {
 
           const deviceResult = await pool.query(
-            'SELECT last_login_device, last_login_at FROM dashboard_users WHERE id = $1',
+            'SELECT last_login_device FROM dashboard_users WHERE id = $1',
             [user.id]
           );
-          const { last_login_device, last_login_at } = deviceResult.rows[0];
+          const { last_login_device } = deviceResult.rows[0];
 
           logActivity(req, ACTIONS.LOGIN, {
             status: 'failure',
@@ -87,7 +82,6 @@ router.post("/login", async (req, res) => {
                     return res.status(500).json({ error: "Session save failed" });
                 }
 
-                // FIXED: Changed 'users' to 'dashboard_users'
                 try {
                     await pool.query(
                       `UPDATE dashboard_users 
@@ -171,7 +165,7 @@ router.post("/logout", async (req, res) => {
 
 router.get("/active-users", isAuthenticated, async (req, res) => {
   try {
-    // FIXED: Restored the INNER JOIN with the session table
+    // Joining the session table limits this to users whose session still exists.
     const result = await pool.query(`
         SELECT u.id, u.username, u.full_name, u.email, r.role_name as role, r.permissions 
         FROM dashboard_users u

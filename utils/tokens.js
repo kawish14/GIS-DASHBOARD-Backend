@@ -59,11 +59,4 @@ function isExpired(expiresAt) {
   return !expiresAt || new Date(expiresAt) <= new Date();
 }
 
-module.exports = {
-  normalizeEmail,
-  isPlausibleEmail,
-  hashToken,
-  issueToken,
-  tokenMatches,
-  isExpired,
-};
+module.exports = { normalizeEmail, isPlausibleEmail, issueToken, tokenMatches, isExpired };

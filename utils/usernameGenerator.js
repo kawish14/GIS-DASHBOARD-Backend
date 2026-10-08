@@ -119,9 +119,4 @@ async function generateUniqueUsername(db, { email, fullName } = {}) {
   return `${base}${Date.now().toString(36)}`;
 }
 
-module.exports = {
-  generateUniqueUsername,
-  deriveBaseHandle,
-  normalizeToHandle,
-  RESERVED_USERNAMES,
-};
+module.exports = { generateUniqueUsername };

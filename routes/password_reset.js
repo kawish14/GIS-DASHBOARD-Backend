@@ -25,7 +25,7 @@ const {
   normalizeEmail, isPlausibleEmail, issueToken, tokenMatches, isExpired,
 } = require('../utils/tokens');
 const {
-  sendPasswordResetEmail, sendInvitationEmail, getRegistrationUrl, getLoginUrl,
+  sendPasswordResetEmail, sendInvitationEmail, getLoginUrl,
 } = require('../utils/mailer');
 
 // Long enough to find the mail and act on it, short enough that a link left in

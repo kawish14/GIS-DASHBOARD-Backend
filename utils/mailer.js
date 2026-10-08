@@ -131,7 +131,7 @@ function ctaButton(href, label) {
         </table>`;
 }
 
-function buildInvitationBody({ email, username, fullName, role, expiresAt }) {
+function buildInvitationBody({ email, username, fullName, expiresAt }) {
     const url = getRegistrationUrl();
     const greeting = fullName ? `Hello ${fullName},` : 'Hello,';
     const expiry = formatDate(expiresAt);
@@ -263,7 +263,7 @@ function buildCredentialsBody({ email, username, password, fullName, role }) {
  * started from -- which is also why the username is repeated here: someone who
  * has forgotten their password has usually forgotten a generated username too.
  */
-function buildPasswordResetBody({ email, username, fullName, resetUrl, expiresAt }) {
+function buildPasswordResetBody({ username, fullName, resetUrl, expiresAt }) {
     const greeting = fullName ? `Hello ${fullName},` : 'Hello,';
     const expiry = formatDate(expiresAt);
     const expiryTime = expiresAt
@@ -425,7 +425,6 @@ module.exports = {
     sendInvitationEmail,
     sendCredentialsEmail,
     sendPasswordResetEmail,
-    isMailConfigured,
     getRegistrationUrl,
     getLoginUrl,
 };

@@ -1,10 +1,10 @@
 const express = require("express");
 const router = express.Router();
-const bcrypt = require("bcrypt");
 const { pool } = require("../db/db"); 
 const {isAuthenticated, isAdmin} = require("./auth");
 const { sendInvitationEmail, sendCredentialsEmail, getRegistrationUrl, getLoginUrl } = require("../utils/mailer");
 const { generateUniqueUsername } = require("../utils/usernameGenerator");
+const { hashPassword } = require("../utils/password");
 const { logActivity, ACTIONS } = require("../utils/activityLog");
 
 // How long an invitation stays open before the admin has to re-issue it.
@@ -257,7 +257,7 @@ router.post('/users', isAuthenticated, isAdmin, async (req, res) => {
         }
         const roleId = roleResult.rows[0].id;
 
-        const hash = await bcrypt.hash(password, 10);
+        const hash = await hashPassword(password);
 
         // 2. Insert the user using the role_id. Created this way the account is
         //    complete, so it starts out active rather than invited. Generating
@@ -374,7 +374,7 @@ router.put('/users/:id', isAuthenticated, isAdmin, async (req, res) => {
             assignments.push(`username = $${values.length}`);
         }
         if (setPassword) {
-            values.push(await bcrypt.hash(password, 10));
+            values.push(await hashPassword(password));
             assignments.push(`password_hash = $${values.length}`);
         }
 
