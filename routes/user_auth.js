@@ -164,13 +164,21 @@ router.post("/logout", async (req, res) => {
 });
 
 router.get("/active-users", isAuthenticated, async (req, res) => {
+  // The sidebar polls this every 30 seconds on its own, even when nobody is
+  // at the screen. Normally every request pushes the 30-minute idle timeout
+  // forward, so this poll alone kept sessions alive forever. Removing
+  // req.session makes express-session leave the session (and its cookie)
+  // untouched for this one request -- session.destroy() does the same.
+  delete req.session;
+
   try {
-    // Joining the session table limits this to users whose session still exists.
+    // Joining the session table limits this to users whose session still
+    // exists and has not expired.
     const result = await pool.query(`
         SELECT u.id, u.username, u.full_name, u.email, r.role_name as role, r.permissions 
         FROM dashboard_users u
         JOIN roles r ON u.role_id = r.id
-        INNER JOIN session s ON u.current_session_id = s.sid
+        INNER JOIN session s ON u.current_session_id = s.sid AND s.expire > NOW()
         ORDER BY u.full_name ASC
     `);
     res.json(result.rows);
