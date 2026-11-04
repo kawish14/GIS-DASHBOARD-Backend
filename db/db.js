@@ -18,8 +18,12 @@ const webappPool = new Pool({
   port: 5432,
 });
 
-// Signed out after this long with no requests. jobs/cleanupSessions.js uses it
-// to work out when an expired session was last active.
+// Signed out after this long with no requests. Each request pushes the expiry
+// (the session row's `expire` column and the cookie) forward again -- except
+// GET /user/active-users, a background poll. The frontend only calls the
+// backend while the user is active, so this works out as "30 minutes of
+// inactivity". Keep SESSION_IDLE_MS in the frontend's AuthContext.jsx equal
+// to this. jobs/cleanupSessions.js uses it to date an expired session's end.
 const SESSION_IDLE_MS = 30 * 60 * 1000;
 
 const user_session = session({

@@ -242,7 +242,16 @@ types one by hand — the generator only ever emits lowercase.
 
 **One live session per account.** Login records `current_session_id`; a second
 device is refused with 403. Tabs in one browser share the cookie, so they share
-the session and need no second sign-in.
+the session and need no second sign-in. The refusal only applies while that
+session is still live: the store's `get()` skips rows whose `expire` has
+passed, so an expired session never blocks a new sign-in.
+
+**Idle timeout (30 min, `SESSION_IDLE_MS` in `db/db.js`).** Every request moves
+`session.expire` and the cookie forward, except `GET /user/active-users`, a
+background poll that must not keep an idle session alive. The frontend calls
+`/user/me` only while the user is active (`AuthContext.jsx`), so a closed,
+sleeping or idle laptop stops sending requests and the session expires on the
+server by itself.
 
 ### 5.3 User activity log
 
